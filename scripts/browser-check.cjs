@@ -1,0 +1,41 @@
+const { chromium } = require('../.browser-tools/node_modules/playwright');
+const fs = require('fs');
+const path = require('path');
+(async()=>{
+  const browser=await chromium.launch({executablePath:'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',headless:true});
+  const page=await browser.newPage({viewport:{width:1440,height:1080}});
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:5173');
+  await page.getByText('Backend connected',{exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Data collector',exact:true}).waitFor();
+  fs.mkdirSync(path.join(__dirname,'../artifacts'),{recursive:true});
+  await page.screenshot({path:path.join(__dirname,'../artifacts/dashboard.png'),fullPage:true});
+  await page.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await page.screenshot({path:path.join(__dirname,'../artifacts/dashboard-dark.png'),fullPage:true});
+  await page.getByRole('button',{name:'Light mode',exact:true}).click();
+  for(const title of ['Agents','Skills','Data Sources','Workflow Designer','Test Center','Execution Monitor','MQTT Monitor','Execution History','Logs','Settings']){
+    await page.locator('nav').getByRole('button',{name:title,exact:title!=='Agents'}).click();
+    await page.getByRole('heading',{name:title,exact:true}).waitFor();
+  }
+  await page.locator('nav').getByRole('button',{name:'Agents'}).click();
+  await page.getByRole('button',{name:'Create BOT',exact:true}).click();
+  const editor=page.locator('textarea');
+  const config=JSON.parse(await editor.inputValue());
+  config.id='BOT-UI-TEST';config.name='Browser test agent';
+  await editor.fill(JSON.stringify(config));
+  await page.getByRole('button',{name:'Save configuration',exact:true}).click();
+  await page.getByRole('heading',{name:'Operation result',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Close result'}).click();
+  await page.getByRole('heading',{name:'Browser test agent',exact:true}).waitFor();
+  await page.locator('article').filter({has:page.getByRole('heading',{name:'Browser test agent',exact:true})}).getByRole('button',{name:'Configure agent'}).click();
+  await page.getByRole('button',{name:'Delete',exact:true}).click();
+  await page.getByRole('heading',{name:'Operation result',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Close result'}).click();
+  await page.locator('nav').getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.setViewportSize({width:768,height:1024});
+  if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Tablet viewport overflows horizontally');
+  await page.screenshot({path:path.join(__dirname,'../artifacts/tablet.png'),fullPage:true});
+  if(errors.length)throw Error(errors.join('\n'));
+  console.log('PASS: all 11 navigation screens, backend/WebSocket connection, agent creation/deletion, desktop/tablet screenshots, no browser exceptions');
+  await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -1,0 +1,16 @@
+.env
+.venv/
+.venv312/
+.npm-cache/
+.browser-tools/
+artifacts/
+.tools/
+node_modules/
+dist/
+data/
+__pycache__/
+.pytest_cache/
+*.log
+*.zip
+.uv-cache/
+.python/

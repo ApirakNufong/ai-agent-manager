@@ -1,0 +1,1 @@
+Run this skill through Test Center or POST /api/skills/production-report-generator@1.0.0/test. Reader tests use actual configured sources; analysis tests use deterministic manufacturing fixtures. Numerical acceptance assertions live in backend/tests/test_skills.py.

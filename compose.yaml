@@ -1,0 +1,116 @@
+name: ai-agent-manager
+x-runtime: &runtime
+  build: ./backend
+  env_file: .env
+  environment: &runtime-env
+    DATABASE_URL: postgresql+psycopg://agent:${POSTGRES_PASSWORD}@postgres:5432/agent_manager
+    MQTT_HOST: mosca
+    DATA_DIR: /data
+    SKILLS_DIR: /app/skills
+    API_TOKEN: ${API_TOKEN:?Set API_TOKEN in .env}
+  volumes:
+    - datasets:/data
+    - skills:/app/skills
+  restart: unless-stopped
+  depends_on:
+    postgres: {condition: service_healthy}
+    mosca: {condition: service_healthy}
+    backend: {condition: service_healthy}
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_DB: agent_manager
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U agent -d agent_manager']
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: production_db
+      MYSQL_USERNAME: ${MYSQL_USERNAME:-agent_reader}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'mysqladmin ping -h localhost --silent']
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+  mosca:
+    build: ./mosca
+    environment:
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?Set MQTT_PASSWORD}
+    healthcheck:
+      test: [CMD, node, -e, "const s=require('net').connect(1883,'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1))"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+  backend:
+    <<: *runtime
+    depends_on:
+      postgres: {condition: service_healthy}
+      mosca: {condition: service_healthy}
+      mysql: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      retries: 30
+  workflow-engine:
+    <<: *runtime
+    command: [python, -m, app.runtime, engine]
+    healthcheck:
+      test: [CMD, python, -m, app.health, engine]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+  manager-agent:
+    <<: *runtime
+    command: [python, -m, app.runtime, manager]
+    healthcheck:
+      test: [CMD, python, -m, app.health, MANAGER]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+  staff-agent-1:
+    <<: *runtime
+    command: [python, -m, app.runtime, BOT-001]
+    healthcheck:
+      test: [CMD, python, -m, app.health, BOT-001]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+  staff-agent-2:
+    <<: *runtime
+    command: [python, -m, app.runtime, BOT-002]
+    healthcheck:
+      test: [CMD, python, -m, app.health, BOT-002]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+  staff-agent-3:
+    <<: *runtime
+    command: [python, -m, app.runtime, BOT-003]
+    healthcheck:
+      test: [CMD, python, -m, app.health, BOT-003]
+      interval: 10s
+      retries: 3
+      start_period: 30s
+  frontend:
+    build: ./frontend
+    ports: ['127.0.0.1:8080:80']
+    depends_on:
+      backend: {condition: service_healthy}
+    restart: unless-stopped
+volumes:
+  postgres-data:
+  mysql-data:
+  datasets:
+  skills:
